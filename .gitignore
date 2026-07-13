@@ -1,0 +1,19 @@
+# Secrets — never commit API keys or local env
+.env
+.env.*
+*.key
+*.pem
+secrets.json
+config.local.*
+
+# Dependencies / build
+node_modules/
+dist/
+build/
+*.zip
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/

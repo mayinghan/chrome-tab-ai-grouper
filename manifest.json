@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "AI Tab Auto-Grouper",
+  "version": "1.0.0",
+  "description": "Automatically groups your open tabs into sensible categories using a Fireworks AI LLM.",
+  "permissions": ["tabs", "tabGroups", "storage", "alarms"],
+  "host_permissions": ["https://api.fireworks.ai/*"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "AI Tab Auto-Grouper"
+  },
+  "options_page": "options.html"
+}

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>AI Tab Auto-Grouper — Settings</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      body {
+        max-width: 520px;
+        margin: 40px auto;
+        padding: 0 20px;
+        line-height: 1.5;
+      }
+      h1 {
+        font-size: 20px;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        margin: 20px 0 6px;
+      }
+      input[type="text"],
+      input[type="password"] {
+        width: 100%;
+        padding: 9px;
+        font-size: 14px;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        box-sizing: border-box;
+      }
+      .hint {
+        font-size: 12px;
+        color: #777;
+        margin-top: 4px;
+      }
+      button {
+        margin-top: 24px;
+        padding: 10px 18px;
+        font-size: 14px;
+        font-weight: 600;
+        border: none;
+        border-radius: 8px;
+        background: #5850ec;
+        color: #fff;
+        cursor: pointer;
+      }
+      #saved {
+        margin-left: 12px;
+        color: #2e7d32;
+        font-size: 13px;
+      }
+      a {
+        color: #5850ec;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>AI Tab Auto-Grouper — Settings</h1>
+
+    <label for="apiKey">Fireworks API key</label>
+    <input type="password" id="apiKey" placeholder="fw_..." autocomplete="off" />
+    <div class="hint">
+      Get a key at
+      <a href="https://fireworks.ai/account/api-keys" target="_blank"
+        >fireworks.ai/account/api-keys</a
+      >. Stored in Chrome sync storage.
+    </div>
+
+    <label for="model">Model</label>
+    <input
+      type="text"
+      id="model"
+      placeholder="accounts/fireworks/models/qwen3p7-plus"
+    />
+    <div class="hint">
+      Any Fireworks chat model. Default:
+      <code>accounts/fireworks/models/qwen3p7-plus</code>.
+    </div>
+
+    <div>
+      <button id="save">Save</button>
+      <span id="saved" hidden>Saved ✓</span>
+    </div>
+
+    <script src="options.js"></script>
+  </body>
+</html>
