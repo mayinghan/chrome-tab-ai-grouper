@@ -38,10 +38,17 @@ async function runGrouping({ windowId } = {}) {
 
   const win = windowId ?? (await chrome.windows.getLastFocused()).id;
   const allTabs = await chrome.tabs.query({ windowId: win });
-  const groupable = allTabs.filter(isGroupable);
+
+  // Only organize tabs the user hasn't already grouped. Tabs already in a
+  // group are left untouched — otherwise every run would tear down and
+  // recreate the user's groups (losing their collapsed state and any manual
+  // edits), which looks like collapsed groups "reopening" by themselves.
+  const groupable = allTabs.filter(
+    (t) => isGroupable(t) && t.groupId === chrome.tabGroups.TAB_GROUP_ID_NONE,
+  );
 
   if (groupable.length < 2) {
-    const result = { grouped: 0, message: "Not enough tabs to group." };
+    const result = { grouped: 0, message: "No new tabs to group." };
     await setStatus({ ok: true, ...result });
     return result;
   }
@@ -106,7 +113,9 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 });
 
 chrome.tabs.onCreated.addListener(scheduleAuto);
-chrome.tabs.onRemoved.addListener(scheduleAuto);
+// Note: intentionally NOT listening to chrome.tabs.onRemoved. Closing a tab
+// creates nothing new to organize, and re-running on close is what made
+// closed/collapsed tabs appear to come back.
 chrome.tabs.onUpdated.addListener((_tabId, changeInfo) => {
   // Only react once a tab finishes loading (has a title/url worth grouping on).
   if (changeInfo.status === "complete") scheduleAuto();
