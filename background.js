@@ -47,7 +47,18 @@ async function runGrouping({ windowId } = {}) {
     (t) => isGroupable(t) && t.groupId === chrome.tabGroups.TAB_GROUP_ID_NONE,
   );
 
-  if (groupable.length < 2) {
+  // Existing groups in this window — the model may merge new tabs into these
+  // instead of always creating fresh groups.
+  const existingGroups = (await chrome.tabGroups.query({ windowId: win })).map(
+    (g) => ({ id: g.id, name: g.title || "" }),
+  );
+
+  // Nothing to do if there are no loose tabs, or just a single loose tab with
+  // no existing group to merge it into.
+  if (
+    groupable.length === 0 ||
+    (groupable.length < 2 && existingGroups.length === 0)
+  ) {
     const result = { grouped: 0, message: "No new tabs to group." };
     await setStatus({ ok: true, ...result });
     return result;
@@ -59,9 +70,10 @@ async function runGrouping({ windowId } = {}) {
     url: t.url,
   }));
 
-  const groups = await classifyTabs(items, { apiKey, model });
+  const groups = await classifyTabs(items, existingGroups, { apiKey, model });
 
-  let appliedGroups = 0;
+  let newGroups = 0;
+  let mergedGroups = 0;
   let appliedTabs = 0;
   for (const g of groups) {
     const tabIds = g.tabIndices
@@ -69,16 +81,32 @@ async function runGrouping({ windowId } = {}) {
       .filter((id) => id != null);
     if (tabIds.length === 0) continue;
 
-    const groupId = await chrome.tabs.group({ tabIds });
-    await chrome.tabGroups.update(groupId, { title: g.name, color: g.color });
-    appliedGroups += 1;
+    if (g.existingGroupId != null) {
+      // Add the tabs to an existing group, then expand it so the newly added
+      // tab is visible even if the group was collapsed.
+      await chrome.tabs.group({ tabIds, groupId: g.existingGroupId });
+      await chrome.tabGroups.update(g.existingGroupId, { collapsed: false });
+      mergedGroups += 1;
+    } else {
+      const groupId = await chrome.tabs.group({ tabIds });
+      await chrome.tabGroups.update(groupId, { title: g.name, color: g.color });
+      newGroups += 1;
+    }
     appliedTabs += tabIds.length;
   }
 
+  const parts = [];
+  if (newGroups) parts.push(`${newGroups} new`);
+  if (mergedGroups) parts.push(`merged into ${mergedGroups} existing`);
   const result = {
-    grouped: appliedGroups,
+    grouped: newGroups,
+    merged: mergedGroups,
     tabs: appliedTabs,
-    message: `Organized ${appliedTabs} tabs into ${appliedGroups} groups.`,
+    message: appliedTabs
+      ? `Organized ${appliedTabs} tab${appliedTabs > 1 ? "s" : ""}${
+          parts.length ? " (" + parts.join(", ") + ")" : ""
+        }.`
+      : "No new tabs to group.",
   };
   await setStatus({ ok: true, ...result });
   return result;

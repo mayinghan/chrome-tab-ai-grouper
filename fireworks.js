@@ -16,27 +16,38 @@ export const GROUP_COLORS = [
   "orange",
 ];
 
-function buildPrompt(tabs) {
+function buildPrompt(tabs, existingGroups) {
   const list = tabs
     .map((t) => `${t.index}. ${t.title || "(untitled)"} — ${t.url}`)
     .join("\n");
 
-  return `You are organizing a user's browser tabs into groups.
+  const existingBlock = existingGroups.length
+    ? `The window already has these groups. You may add tabs to them by their numeric id:\n${existingGroups
+        .map((g) => `- id ${g.id}: "${g.name || "(unnamed)"}"`)
+        .join("\n")}`
+    : "The window has no existing groups yet.";
 
-Here are the open tabs, one per line as "index. title — url":
+  return `You are organizing a user's browser tabs.
+
+These tabs are currently UNGROUPED, one per line as "index. title — url":
 
 ${list}
 
-Cluster these tabs into a small number of coherent groups (aim for 2–7 groups; do not put every tab in its own group). Base groups on topic, task, or site — for example "Work", "Shopping", "Docs", "Social", "Research".
+${existingBlock}
+
+For each ungrouped tab, decide whether it belongs in one of the existing groups or in a new group.
 
 Rules:
-- Every tab index must appear in exactly one group.
-- Group names must be SHORT (1–2 words), suitable as a tab-group label.
-- Pick a "color" for each group from this exact set: ${GROUP_COLORS.join(", ")}.
-- Use a different color for each group when possible.
+- PREFER adding a tab to an existing group when it clearly fits that group's topic/site. Reference the group by its numeric id.
+- Only create a NEW group when several ungrouped tabs share a topic that none of the existing groups covers. Aim for few groups; do not put every tab in its own group.
+- If a tab fits no existing group and cannot form a coherent new group with other ungrouped tabs, leave it out entirely (do not force it).
+- New group names must be SHORT (1–2 words). Pick a "color" for each NEW group from this exact set: ${GROUP_COLORS.join(", ")}.
+- Every tab index you use must be one of the ungrouped indices above, used at most once.
 
 Respond with ONLY a JSON object in this exact shape, nothing else:
-{"groups":[{"name":"Work","color":"blue","tabIndices":[0,3,4]},{"name":"Shopping","color":"green","tabIndices":[1,2]}]}`;
+{"groups":[{"existingGroupId":123,"tabIndices":[0,3]},{"name":"Research","color":"green","tabIndices":[1,2]}]}
+- To add tabs to an existing group: set "existingGroupId" to its id and omit name/color.
+- To create a new group: set "name" and "color" and omit existingGroupId.`;
 }
 
 // Extract the first JSON object from a model response that may contain
@@ -84,11 +95,12 @@ function extractJson(text) {
 }
 
 /**
- * @param {{index:number,title:string,url:string}[]} tabs
+ * @param {{index:number,title:string,url:string}[]} tabs  ungrouped tabs to organize
+ * @param {{id:number,name:string}[]} existingGroups  groups already in the window
  * @param {{apiKey:string, model:string}} opts
- * @returns {Promise<{name:string,color:string,tabIndices:number[]}[]>}
+ * @returns {Promise<({existingGroupId:number,tabIndices:number[]}|{name:string,color:string,tabIndices:number[]})[]>}
  */
-export async function classifyTabs(tabs, { apiKey, model }) {
+export async function classifyTabs(tabs, existingGroups, { apiKey, model }) {
   const body = {
     model,
     // Reasoning models spend tokens on <think> before the answer; give the
@@ -102,7 +114,7 @@ export async function classifyTabs(tabs, { apiKey, model }) {
         content:
           "You are a precise assistant that organizes browser tabs and replies with strict JSON only.",
       },
-      { role: "user", content: buildPrompt(tabs) },
+      { role: "user", content: buildPrompt(tabs, existingGroups) },
     ],
   };
 
@@ -131,13 +143,28 @@ export async function classifyTabs(tabs, { apiKey, model }) {
 
   // Validate and sanitize.
   const validIndices = new Set(tabs.map((t) => t.index));
-  return groups
-    .map((g) => ({
-      name: String(g.name || "Tabs").slice(0, 40),
-      color: GROUP_COLORS.includes(g.color) ? g.color : "grey",
-      tabIndices: Array.isArray(g.tabIndices)
-        ? g.tabIndices.filter((i) => validIndices.has(i))
-        : [],
-    }))
-    .filter((g) => g.tabIndices.length > 0);
+  const validGroupIds = new Set(existingGroups.map((g) => g.id));
+  const used = new Set(); // ensure each tab is assigned at most once
+
+  const result = [];
+  for (const g of groups) {
+    const tabIndices = Array.isArray(g.tabIndices)
+      ? g.tabIndices.filter((i) => validIndices.has(i) && !used.has(i))
+      : [];
+    if (tabIndices.length === 0) continue;
+    tabIndices.forEach((i) => used.add(i));
+
+    if (g.existingGroupId != null && validGroupIds.has(g.existingGroupId)) {
+      // Merge into an existing group.
+      result.push({ existingGroupId: g.existingGroupId, tabIndices });
+    } else {
+      // Create a new group (fall back gracefully if id was invalid).
+      result.push({
+        name: String(g.name || "Tabs").slice(0, 40),
+        color: GROUP_COLORS.includes(g.color) ? g.color : "grey",
+        tabIndices,
+      });
+    }
+  }
+  return result;
 }
